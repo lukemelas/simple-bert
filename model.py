@@ -5,6 +5,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 import utils
+from utils import Linear, Embedding
 
 class LightConvLanguageModel(nn.Module):
     '''A class that essentially wraps the decoder and provides utils.'''
@@ -65,21 +66,16 @@ class LightConvLanguageModel(nn.Module):
         parser.add_argument('--weight-dropout', type=float, metavar='D',
                             help='dropout probability for conv weights')
 
-        # # NOTE: Not sure what is going on here <-- figure this out
-        # if not hasattr(args, 'max_source_positions'):
-        #     args.max_source_positions = args.tokens_per_sample
-        # if not hasattr(args, 'max_target_positions'):
-        #     args.max_target_positions = args.tokens_per_sample
-
     @classmethod
     def build_model(cls, args, task):
         """Build a new model instance."""
 
         # For language modeling, size of input and outpur are the same
         args.decoder_input_dim = args.decoder_output_dim = args.decoder_embed_dim
+        args.max_source_positions = args.max_target_positions = 100 # not totally sure about this one
 
         # Simple embedding
-        embed_tokens = nn.Embedding(len(task.dictionary), args.decoder_input_dim, padding_idx=task.dictionary.pad())
+        embed_tokens = Embedding(len(task.dictionary), args.decoder_input_dim, padding_idx=task.dictionary.pad())
         # NOTE: task.dictionary.pad needs to be replaced
 
         # Convolutional decoder
@@ -113,49 +109,33 @@ class LightConvDecoder(nn.Module):
         # Embeddings
         self.dropout = args.dropout
         self.share_input_output_embed = args.share_decoder_input_output_embed
-        input_embed_dim = embed_tokens.embedding_dim
-        embed_dim = args.decoder_embed_dim
-        output_embed_dim = args.decoder_output_dim
-        padding_idx = embed_tokens.padding_idx
         self.max_target_positions = args.max_target_positions
         self.embed_tokens = embed_tokens
         self.embed_scale = math.sqrt(embed_dim)
-        self.project_in_dim = Linear(input_embed_dim, embed_dim, bias=False) if embed_dim != input_embed_dim else None
-
         
-        self.embed_positions = PositionalEmbedding(
-            args.max_target_positions, embed_dim, padding_idx,
-            learned=args.decoder_learned_pos,
-        ) if not args.no_token_positional_embeddings else None
+        # Embedding projections (if input and output sizes are different)
+        input_embed_dim = embed_tokens.embedding_dim
+        embed_dim = args.decoder_embed_dim
+        output_embed_dim = args.decoder_output_dim
+        self.project_in_dim = None if embed_dim == input_embed_dim else Linear(input_embed_dim, embed_dim, bias=False)
+        self.project_out_dim = None if embed_dim == output_embed_dim else Linear(embed_dim, output_embed_dim, bias=False)
 
+        # Layers
         self.layers = nn.ModuleList([])
         self.layers.extend([
             LightConvDecoderLayer(args, no_encoder_attn, kernel_size=args.decoder_kernel_size_list[i])
             for i in range(args.decoder_layers)
         ])
 
-        self.adaptive_softmax = None
-
-        self.project_out_dim = Linear(embed_dim, output_embed_dim, bias=False)
-            if embed_dim != output_embed_dim and not args.tie_adaptive_weights else None
-
-        if args.adaptive_softmax_cutoff is not None:
-            self.adaptive_softmax = AdaptiveSoftmax(
-                len(dictionary),
-                output_embed_dim,
-                options.eval_str_list(args.adaptive_softmax_cutoff, type=int),
-                dropout=args.adaptive_softmax_dropout,
-                adaptive_inputs=embed_tokens if args.tie_adaptive_weights else None,
-                factor=args.adaptive_softmax_factor,
-                tie_proj=args.tie_adaptive_proj,
-            )
-        elif not self.share_input_output_embed:
+        # Tie weights
+        if not self.share_input_output_embed:
             self.embed_out = nn.Parameter(torch.Tensor(len(dictionary), output_embed_dim))
             nn.init.normal_(self.embed_out, mean=0, std=output_embed_dim ** -0.5)
-        self.register_buffer('version', torch.Tensor([2]))
+
+        # Last layer normalization
         self.normalize = args.decoder_normalize_before and final_norm
         if self.normalize:
-            self.layer_norm = LayerNorm(embed_dim)
+            self.last_layer_norm = LayerNorm(embed_dim)
 
     def forward(self, prev_output_tokens, encoder_out=None, incremental_state=None):
         """
@@ -168,39 +148,27 @@ class LightConvDecoder(nn.Module):
                 :ref:`Incremental decoding`
         Returns:
             tuple:
-                - the last decoder layer's output of shape `(batch, tgt_len,
-                  vocab)`
-                - the last decoder layer's attention weights of shape `(batch,
-                  tgt_len, src_len)`
+                - the last decoder layer's output of shape 
+                  `(batch, tgt_len, vocab)`
+                - a dictionary of attention weights and inner states 
         """
-        # embed positions
-        positions = self.embed_positions(
-            prev_output_tokens,
-            incremental_state=incremental_state,
-        ) if self.embed_positions is not None else None
-
+        # Incremental state for decoding
         if incremental_state is not None:
             prev_output_tokens = prev_output_tokens[:, -1:]
-            if positions is not None:
-                positions = positions[:, -1:]
 
-        # embed tokens and positions
+        # Embed tokens (and add positional encoding)
         x = self.embed_scale * self.embed_tokens(prev_output_tokens)
-
         if self.project_in_dim is not None:
             x = self.project_in_dim(x)
-
-        if positions is not None:
-            x += positions
         x = F.dropout(x, p=self.dropout, training=self.training)
 
-        # B x T x C -> T x B x C
-        x = x.transpose(0, 1)
+        # # NOTE: We do NOT DO THIS (!)
+        # # B x T x C -> T x B x C
+        # x = x.transpose(0, 1)
+
+        # Decode
         attn = None
-
         inner_states = [x]
-
-        # decoder layers
         for layer in self.layers:
             x, attn = layer(
                 x,
@@ -210,29 +178,27 @@ class LightConvDecoder(nn.Module):
             )
             inner_states.append(x)
 
+        # Last layer normalization
         if self.normalize:
-            x = self.layer_norm(x)
+            x = self.last_layer_norm(x)
 
-        # T x B x C -> B x T x C
-        x = x.transpose(0, 1)
+        # # NOTE: We do NOT DO THIS (!)
+        # # T x B x C -> B x T x C
+        # x = x.transpose(0, 1)
 
+        # Project back to size of vocabulary
         if self.project_out_dim is not None:
             x = self.project_out_dim(x)
-
-        if self.adaptive_softmax is None:
-            # project back to size of vocabulary
-            if self.share_input_output_embed:
-                x = F.linear(x, self.embed_tokens.weight)
-            else:
-                x = F.linear(x, self.embed_out)
+        if self.share_input_output_embed:
+            x = F.linear(x, self.embed_tokens.weight)
+        else:
+            x = F.linear(x, self.embed_out)
 
         return x, {'attn': attn, 'inner_states': inner_states}
 
     def max_positions(self):
         """Maximum output length supported by the decoder."""
-        if self.embed_positions is None:
-            return self.max_target_positions
-        return min(self.max_target_positions, self.embed_positions.max_positions())
+        return self.max_target_positions
 
     def buffered_future_mask(self, tensor):
         dim = tensor.size(0)
