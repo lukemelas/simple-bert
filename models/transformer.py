@@ -12,9 +12,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from common_layers import Embeddings, LayerNorm, gelu
+from utils.utils import split_last, merge_last
+from .common_layers import Embeddings, LayerNorm, gelu
 
-class Config(NamedTuple):
+class TransformerConfig(NamedTuple):
     "Configuration for BERT model"
     vocab_size: int = None # Size of Vocabulary
     dim: int = 768 # Dimension of Hidden Layer in Transformer Encoder
@@ -25,8 +26,6 @@ class Config(NamedTuple):
     p_drop_attn: float = 0.1 # Probability of Dropout of Attention Layers
     max_len: int = 512 # Maximum Length for Positional Embeddings
     n_segments: int = 2 # Number of Sentence Segments
-    kernel_list: list = None 
-    conv_type: str = None 
 
     @classmethod
     def from_json(cls, file):
@@ -37,20 +36,6 @@ class Config(NamedTuple):
         assert cfg.kernel_list is None
         assert cfg.conv_type is None
         assert cfg.dim % n_heads == 0
-
-def split_last(x, shape):
-    "split the last dimension to given shape"
-    shape = list(shape)
-    assert shape.count(-1) <= 1
-    if -1 in shape:
-        shape[shape.index(-1)] = int(x.size(-1) / -np.prod(shape))
-    return x.view(*x.size()[:-1], *shape)
-
-def merge_last(x, n_dims):
-    "merge the last n_dims to a dimension"
-    s = x.size()
-    assert n_dims > 1 and n_dims < len(s)
-    return x.view(*s[:-n_dims], -1)
 
 class MultiHeadedSelfAttention(nn.Module):
     """ Multi-Headed Dot Product Attention """

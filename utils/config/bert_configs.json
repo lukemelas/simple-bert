@@ -1,0 +1,27 @@
+{
+    "bert-base-uncased": {
+        "dim": 768,
+        "dim_ff": 3072,
+        "n_layers": 12,
+        "p_drop_attn": 0.1,
+        "n_heads": 12,
+        "p_drop_hidden": 0.1,
+        "max_len": 512,
+        "n_segments": 2,
+        "vocab_size": 30522,
+        "pretrained_url": "https://storage.googleapis.com/bert_models/2018_10_18/uncased_L-12_H-768_A-12.zip"
+    },
+    
+    "bert-large-uncased": {
+        "dim": 1024,
+        "dim_ff": 4096,
+        "n_layers": 24,
+        "n_heads": 16,
+        "p_drop_attn": 0.1,
+        "p_drop_hidden": 0.1,
+        "max_len": 512,
+        "vocab_size": 30522,
+        "pretrained_url": "https://storage.googleapis.com/bert_models/2018_10_18/uncased_L-24_H-1024_A-16.zip"
+    }
+    
+}

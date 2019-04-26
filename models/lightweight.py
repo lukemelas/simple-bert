@@ -9,14 +9,6 @@ import torch.nn.functional as F
 
 from common_layers import Linear, LayerNorm, Embedding, gelu
 
-# # TODO: Restructure files:
-# - models
-#   - common_layers.py
-#   - lightweight.py
-#   - transformer.py
-#   - evolved_transformer.py
-#   - heads.py
-
 class LightweightConfig(NamedTuple):
     "Configuration for LWDC model"
     vocab_size: int = None # Size of Vocabulary
@@ -33,7 +25,7 @@ class LightweightConfig(NamedTuple):
     glu_in_conv: bool = True # include generalized linear unit in the conv layer
     norm_before_conv: bool = True # layer norm before conv and after conv, not just after
     weight_softmax: bool = True # softmax the convolutional layer weights
-    # tie_weights: bool = True # Share input and output weights # no choice 
+    # tie_weights: bool = True # Share input and output weights # you have no choice 
 
     @classmethod
     def from_json(cls, file):

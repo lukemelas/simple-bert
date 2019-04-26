@@ -4,8 +4,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from common_layers import LayerNorm, gelu
-
 # GELU Activation: https://arxiv.org/abs/1606.08415
 gelu = lambda x : x * 0.5 * (1.0 + torch.erf(x / math.sqrt(2.0)))
 
@@ -28,6 +26,7 @@ except ImportError:
             return self.weight * x + self.bias
 
 def Linear(in_features, out_features, bias=True):
+    ''' Wrapper for nn.Linear '''
     m = nn.Linear(in_features, out_features, bias)
     nn.init.xavier_uniform_(m.weight)
     if bias:
@@ -35,13 +34,14 @@ def Linear(in_features, out_features, bias=True):
     return m
 
 def Embedding(num_embeddings, embedding_dim, padding_idx):
+    ''' Wrapper for nn.Embedding '''
     m = nn.Embedding(num_embeddings, embedding_dim, padding_idx=padding_idx)
     nn.init.normal_(m.weight, mean=0, std=embedding_dim ** -0.5)
     nn.init.constant_(m.weight[padding_idx], 0)
     return m
 
 class Embeddings(nn.Module):
-    "The embedding module from word, position and token_type embeddings."
+    '''Embedding with optional position and segment type embeddings.'''
     def __init__(self, cfg, position_embeds=True, segment_embeds=True):
         super().__init__()
         self.tok_embed = Embedding(cfg.vocab_size, cfg.dim) # token embedding
