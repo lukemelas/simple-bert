@@ -63,18 +63,18 @@ class SentencePairDataLoader():
                     if rand() < self.short_sampling_prob \
                     else int(self.max_len / 2)
 
-                is_next = rand() < 0.5 # whether token_b is next to token_a or not
+                is_not_next = rand() < 0.5 # whether token_b is next to token_a or not
 
                 tokens_a = self.read_tokens(self.f_pos, len_tokens, True)
                 seek_random_offset(self.f_neg)
-                f_next = self.f_pos if is_next else self.f_neg
+                f_next = self.f_neg if is_not_next else self.f_pos
                 tokens_b = self.read_tokens(f_next, len_tokens, False)
 
                 if tokens_a is None or tokens_b is None: # end of file
                     self.f_pos.seek(0, 0) # reset file pointer
                     return
 
-                instance = (is_next, tokens_a, tokens_b)
+                instance = (is_not_next, tokens_a, tokens_b)
                 for proc in self.pipeline:
                     instance = proc(instance)
 
@@ -98,7 +98,7 @@ class PipelineForPretrain():
         self.max_len = max_len
 
     def __call__(self, instance):
-        is_next, tokens_a, tokens_b = instance
+        is_not_next, tokens_a, tokens_b = instance
 
         # -3  for special tokens [CLS], [SEP], [SEP]
         truncate_tokens_pair(tokens_a, tokens_b, self.max_len - 3)
@@ -143,4 +143,4 @@ class PipelineForPretrain():
             masked_pos.extend([0]*n_pad)
             masked_weights.extend([0]*n_pad)
 
-        return (input_ids, segment_ids, input_mask, masked_ids, masked_pos, masked_weights, is_next)
+        return (input_ids, segment_ids, input_mask, masked_ids, masked_pos, masked_weights, is_not_next)

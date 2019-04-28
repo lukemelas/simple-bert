@@ -138,7 +138,7 @@ epoch = 0
 trainer = Trainer(logger)
 while trainer.global_step < args.total_iterations:
 
-    # # Validation
+    # # Validation is not yet implemented -- run it for as long as possible
     # if args.val > 0 and trainer.global_step % args.val_every == 0:
     #     trainer.evaluate(args, model, val_dataloader, criterion) # TODO: add val
 

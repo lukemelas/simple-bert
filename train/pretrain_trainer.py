@@ -12,54 +12,13 @@ class Trainer():
         self.logger = logger
         self.global_step = 0
         
-#     def evaluate(self, args, model, dataloader, criterion):
-#         ''' Evaluate model on the dev/test set '''
-#         model.eval()
-#         total_loss = 0
-#         all_logits = None
-#         all_labels = None
-#         for step, batch in enumerate(tqdm(dataloader, desc=f"Validation")):
-#             batch = tuple(t.to(args.device) for t in batch)
-#             input_ids, segment_ids, input_mask, masked_ids, masked_pos, masked_weights, is_next = batch
-
-#             # Forward
-#             with torch.no_grad():
-#                 logits = model(input_ids, segment_ids, input_mask)
-
-#             # Calculate loss
-#             labels = labels.view(-1)
-#             logits = logits.view(-1) if args.output_mode == 'regression' else logits.view(-1, args.num_labels)
-#             loss = criterion(logits, labels)
-
-#             # Statistics
-#             total_loss += loss.mean().item()
-#             logits = logits.detach().cpu().numpy()
-#             labels = labels.detach().cpu().numpy()
-#             all_logits = logits if all_logits is None else np.append(all_logits, logits, axis=0)
-#             all_labels = labels if all_labels is None else np.append(all_labels, labels, axis=0)
-
-#         # Calculate prediction metrics (i.e. accuracy) and log
-#         average_loss = total_loss / len(dataloader.dataset)
-#         predictions = np.squeeze(all_logits) if args.output_mode == 'regression' else np.argmax(all_logits, axis=1)
-#         result = compute_metrics(args.task_name, predictions, all_labels, 
-#             logits=all_logits / all_logits.sum(axis=1, keepdims=True))
-
-#         # Log
-#         if self.logger:
-#             self.logger.add_scalar('val/val_loss', average_loss, self.global_step)
-#             self.logger.info(f"Val loss: {average_loss:.3f}")
-#             for key in sorted(result.keys()):
-#                 self.logger.add_scalar(f'val/{key}', result[key], self.global_step)
-#                 self.logger.info(f"Val {key}: {result[key]:.3f}")
-#         return average_loss, result
-
     def train(self, args, model, dataloader, optimizer, epoch):
         '''Train for a single epoch on a training dataset'''
         model.train()
         total_loss = 0
         for step, batch in enumerate(tqdm(dataloader, desc=f"[Epoch {epoch+1:3d}] Batch ")):
             batch = tuple(t.to(args.device) for t in batch)
-            input_ids, segment_ids, input_mask, masked_ids, masked_pos, masked_weights, is_next = batch
+            input_ids, segment_ids, input_mask, masked_ids, masked_pos, masked_weights, is_not_next = batch
 
             # Forward 
             logits_lm, logits_sc = model(input_ids, segment_ids, input_mask, masked_pos)
@@ -67,7 +26,7 @@ class Trainer():
             # Masked LM and sequence classification losses
             loss_lm = F.cross_entropy(logits_lm.transpose(1, 2), masked_ids, reduction='none')
             loss_lm = (loss_lm * masked_weights.float()).mean()
-            loss_sc = F.cross_entropy(logits_sc, is_next)
+            loss_sc = F.cross_entropy(logits_sc, is_not_next)
             loss = loss_lm + loss_sc
             
             # Multi-gpu / gradient accumulation
@@ -103,7 +62,11 @@ class Trainer():
 
         if self.logger:
             self.logger.info(f'Train loss: {total_loss/len(dataloader.dataset):.3f}')
-                
+              
+    def evaluate(self):
+        # Validation is not implemented -- pretrain for as long as possible
+        raise NotImplementedError()
+
     def save(self, args, model, name=None):
         ''' Save a trained model and the associated configuration '''
         model_name = f"model-{self.global_step}.pth" if name is None else name 
