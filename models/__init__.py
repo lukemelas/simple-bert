@@ -38,8 +38,8 @@ def get_model_for_pretrain(args):
         if '.pth' in args.load_weights: # PyTorch file
             model.load_state_dict(torch.load(args.load_weights))
         elif '.ckpt' in args.load_weights: # TensorFlow file
-            from utils.load_weights import load_weights_for_classification
-            load_weights_for_classification(model, args.load_weights)
+            from utils.load_weights import load_weights_for_pretrain
+            load_weights_for_pretrain(model, args.load_weights)
 
     # CUDA / half-precision / distributed training
     model = distribute_and_fp16(args, model)    

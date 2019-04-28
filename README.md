@@ -5,3 +5,5 @@ Key features:
  * Load pre-trained weights from TensorFlow
  * Finetune BERT for text classification
  * Pretrain BERT from scratch on your own text data
+
+More details coming soon!

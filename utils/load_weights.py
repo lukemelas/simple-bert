@@ -65,7 +65,7 @@ def load_transformer(model, checkpoint_file):
             b.norm2.beta:           p+"output/LayerNorm/beta",
         })
 
-def load_weights_for_pretraining(model, checkpoint_file):
+def load_weights_for_pretrain(model, checkpoint_file):
     '''
     Load parameters of model for pretraining (i.e. masked LM and sequence classifier)
     from TensorFlow model checkpoint file onto PyTorch model. 
